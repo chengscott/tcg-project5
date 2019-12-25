@@ -1,10 +1,10 @@
 #pragma once
 #include "board.hpp"
-#include "random.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <random>
 #include <torch/script.h>
 #include <unordered_map>
 
@@ -79,6 +79,30 @@ private:
       }
       return true;
     }
+    template <class PRNG>
+    bool expand_root(const Board &b, PRNG &rng,
+                     torch::jit::script::Module &net) noexcept {
+      // forward root
+      Board board(b);
+      torch::Tensor inputs =
+          torch::from_blob(board.get_features(), {1, 4, 9, 9}).to(torch::kCUDA);
+      const auto &outputs = net.forward({inputs}).toTuple();
+      const auto &p_tensor =
+          torch::softmax(outputs->elements()[0].toTensor(), 1).to(torch::kCPU);
+      const auto &p_view = p_tensor.accessor<float, 2>();
+      const auto &v_tensor = outputs->elements()[1].toTensor().to(torch::kCPU);
+      const auto &v_view = v_tensor.accessor<float, 2>();
+      // store (p[], v)
+      for (size_t i = 0; i < 81; ++i) {
+        prob_[i] = p_view[0][i];
+      }
+      z_value_ = v_view[0][0];
+      // expand child
+      expand(b, net);
+      // root add dirichlet
+      add_dirichlet(children_size_, rng);
+      return true;
+    }
     void update(float z) noexcept {
       ++visits_;
       sqrt_visits_ = std::sqrt(visits_);
@@ -88,8 +112,11 @@ private:
         noexcept {
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
+        std::cerr << child.pos_ << ' ' << child.visits_ << std::endl;
         visits.emplace(child.pos_, child.visits_);
       }
+      std::cerr << "before: " << z_value_ << std::endl;
+      std::cerr << "after:  " << q_value_ << std::endl;
     }
 
   private:
@@ -97,6 +124,20 @@ private:
       bw_ = bw;
       pos_ = pos;
       parent_ = parent;
+    }
+
+    template <class PRNG> void add_dirichlet(size_t size, PRNG &rng) {
+      float noise[81];
+      std::gamma_distribution<> gamma(.03);
+      float sum = 0.f;
+      for (size_t i = 0; i < size; ++i) {
+        noise[i] = gamma(rng);
+        sum += noise[i];
+      }
+      const constexpr float eps = .25f;
+      for (size_t i = 0; i < size; ++i) {
+        prob_[i] = (1 - eps) * prob_[i] + eps * (noise[i] / sum);
+      }
     }
 
   private:
@@ -130,6 +171,7 @@ public:
     const auto start_time = hclock::now();
     Node root;
     root.init_bw(1 - bw);
+    root.expand_root(b, engine_, net_);
     do {
       Node *node = &root;
       Board board(b);
@@ -151,7 +193,7 @@ public:
         node = node->get_parent();
         z = -z;
       }
-    } while (++total_counts < 87);
+    } while (++total_counts < 400);
     // (hclock::now() - start_time) < threshold_time);
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                               hclock::now() - start_time)
@@ -172,6 +214,6 @@ public:
 
 private:
   torch::jit::script::Module net_;
-  splitmix seed_{};
-  xorshift engine_{seed_()};
+  std::random_device seed_{};
+  std::default_random_engine engine_{seed_()};
 };
