@@ -60,7 +60,11 @@ public:
     return true;
   }
 
-  uint8_t *get_features() noexcept {
+  bool has_legal_move(size_t bw) const noexcept { return !forbid_[bw].all(); }
+
+  board_t get_legal_moves(size_t bw) const noexcept { return ~forbid_[bw]; }
+
+  float *get_features() noexcept {
     const auto &bw = bw_;
     features_.resize(9 * 9 * 4);
     fill(board_[bw], 0);
@@ -70,12 +74,29 @@ public:
     return features_.data();
   }
 
+  template <class PRNG>
+  inline size_t random_legal_move(size_t bw, PRNG &rng) const noexcept {
+    return random_move_from_board(~forbid_[bw], rng);
+  }
+
+  template <class PRNG>
+  static size_t random_move_from_board(const board_t &valid,
+                                       PRNG &rng) noexcept {
+    // assert(valid.any());
+    const size_t index = rng() % valid.count();
+    size_t action = valid._Find_first();
+    for (size_t i = 0; i < index; ++i) {
+      action = valid._Find_next(action);
+    }
+    return action;
+  }
+
 private:
   void fill(const board_t &board, size_t base) noexcept {
     for (size_t i = 0; i < 9; ++i) {
       for (size_t j = 0; j < 9; ++j) {
         features_[base * 81 + i * 9 + j] =
-            static_cast<uint8_t>(board.test(i * 9 + j));
+            static_cast<float>(board.test(i * 9 + j));
       }
     }
   }
@@ -138,7 +159,7 @@ private:
 
 private:
   size_t bw_ = 0;
-  std::vector<uint8_t> features_;
+  std::vector<float> features_;
   board_t board_[2], forbid_[2];
   DisjointSet dset_[2];
   const static constexpr auto dir_ = []() constexpr {

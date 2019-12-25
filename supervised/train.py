@@ -7,7 +7,7 @@ from torch import nn
 
 
 def main(args):
-    net = AlphaZero(in_channels=4).to(args.device)
+    net = AlphaZero(in_channels=4, layers=args.layers).to(args.device)
     p_criterion = nn.CrossEntropyLoss()
     v_criterion = nn.MSELoss()
     # TODO: decrease learning rate
@@ -75,17 +75,23 @@ def main(args):
             print('[{:5d}] Test Accuracy: {:.2%}'.format(
                 epoch, correct / total))
 
+    # freeze model
+    inputs = torch.rand(1, 4, 9, 9).to(args.device)
+    frozen_net = torch.jit.trace(net, inputs)
+    frozen_net.save(f'{args.path}.pt')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # dataset
-    parser.add_argument('--train-dataset', default='../self-play')
-    parser.add_argument('--test-dataset', default='../self-play-test')
+    parser.add_argument('--train-dataset', default='../../self-play')
+    parser.add_argument('--test-dataset', default='../../self-play-test')
     # model
     parser.add_argument('-p', '--path', default='model/model')
     parser.add_argument('-r', '--restore', action='store_true')
     # training
     parser.add_argument('-d', '--device', default='cuda')
+    parser.add_argument('--layers', default=5, type=int)
     parser.add_argument('-bs', '--batch_size', default=64, type=int)
     parser.add_argument('-e', '--epochs', default=100000, type=int)
     parser.add_argument('-lr', '--lr', default=.01, type=float)

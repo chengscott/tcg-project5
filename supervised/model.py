@@ -51,9 +51,9 @@ class ResNet(nn.Module):
 
 
 class AlphaZero(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, layers):
         super().__init__()
-        self.resnet = ResNet(in_channels, 18)
+        self.resnet = ResNet(in_channels, layers)
         # policy head
         self.policy_head_front = nn.Sequential(
             nn.Conv2d(256, 2, 1, bias=False),
