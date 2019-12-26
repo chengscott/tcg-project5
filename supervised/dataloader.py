@@ -45,7 +45,7 @@ class SelfPlayLoader(torch.utils.data.Dataset):
                              torch.Tensor([v_label]).to(device)))
                         # print(k, move, bw, index)
                     elif 'RE' in prop:
-                        winner = -1 if 'B+' in prop['RE'][0] else 1
+                        winner = 0 if 'B+' in prop['RE'][0] else 1
                 self._features.append(features)
         self._len = len(self._features)
 

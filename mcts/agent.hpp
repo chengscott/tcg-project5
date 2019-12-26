@@ -8,10 +8,6 @@
 #include <torch/script.h>
 #include <unordered_map>
 
-#ifndef MODEL_FILE
-#define MODEL_FILE ("model.pt")
-#endif
-
 class MCTSAgent {
 private:
   class Node {
@@ -52,27 +48,31 @@ private:
       // expand children
       children_size_ = size;
       children_ = std::make_unique<Node[]>(size);
-      torch::Tensor inputs =
-          torch::empty({long(size), 4, 9, 9}).to(torch::kCUDA);
       for (size_t i = 0, pos = moves._Find_first(); i < size;
            ++i, pos = moves._Find_next(pos)) {
         children_[i].init(1 - bw_, pos, this);
+      }
+      // forward children
+      const auto &lsize = static_cast<long>(size);
+      torch::Tensor inputs = torch::empty({lsize, 4, 9, 9}).to(torch::kCUDA);
+      for (long i = 0; i < lsize; ++i) {
+        const auto &child = children_[static_cast<size_t>(i)];
         Board board(b);
-        board.place(1 - bw_, pos);
+        board.place(child.bw_, child.pos_);
         inputs[i] =
             torch::from_blob(board.get_features(), {4, 9, 9}).to(torch::kCUDA);
       }
-      // forward children
       const auto &outputs = net.forward({inputs}).toTuple();
+      // outputs viewer
       const auto &p_tensor =
           torch::softmax(outputs->elements()[0].toTensor(), 1).to(torch::kCPU);
       const auto &p_view = p_tensor.accessor<float, 2>();
       const auto &v_tensor = outputs->elements()[1].toTensor().to(torch::kCPU);
       const auto &v_view = v_tensor.accessor<float, 2>();
       // store (p[], v)
-      for (size_t i = 0; i < size; ++i) {
-        auto &child = children_[i];
-        for (size_t j = 0; j < 81; ++j) {
+      for (long i = 0; i < lsize; ++i) {
+        auto &child = children_[static_cast<size_t>(i)];
+        for (long j = 0; j < 81; ++j) {
           child.prob_[j] = p_view[i][j];
         }
         child.z_value_ = v_view[i][0];
@@ -93,14 +93,14 @@ private:
       const auto &v_tensor = outputs->elements()[1].toTensor().to(torch::kCPU);
       const auto &v_view = v_tensor.accessor<float, 2>();
       // store (p[], v)
-      for (size_t i = 0; i < 81; ++i) {
+      for (long i = 0; i < 81; ++i) {
         prob_[i] = p_view[0][i];
       }
       z_value_ = v_view[0][0];
       // expand child
       expand(b, net);
       // root add dirichlet
-      add_dirichlet(children_size_, rng);
+      // add_dirichlet(children_size_, rng);
       return true;
     }
     void update(float z) noexcept {
@@ -112,8 +112,14 @@ private:
         noexcept {
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
-        std::cerr << child.pos_ << ' ' << child.visits_ << std::endl;
-        visits.emplace(child.pos_, child.visits_);
+        if (child.visits_ > 0) {
+          visits.emplace(child.pos_, child.visits_);
+          // std::cerr << child.pos_ << ' ' << child.visits_ << std::endl;
+          size_t p0 = child.pos_ % 9, p1 = child.pos_ / 9;
+          std::cerr << char(static_cast<size_t>(p0 >= 8) + p0 + 'A')
+                    << char((8 - p1) + '1') << ' ' << child.visits_ << ' '
+                    << child.z_value_ << ' ' << child.q_value_ << std::endl;
+        }
       }
       std::cerr << "before: " << z_value_ << std::endl;
       std::cerr << "after:  " << q_value_ << std::endl;
@@ -128,7 +134,7 @@ private:
 
     template <class PRNG> void add_dirichlet(size_t size, PRNG &rng) {
       float noise[81];
-      std::gamma_distribution<> gamma(.03);
+      std::gamma_distribution<float> gamma(.03f);
       float sum = 0.f;
       for (size_t i = 0; i < size; ++i) {
         noise[i] = gamma(rng);
@@ -153,8 +159,9 @@ private:
   };
 
 public:
-  void load_model() {
-    net_ = torch::jit::load(MODEL_FILE);
+  void load_model(const std::string &model_file) {
+    std::cerr << "> Load model from " << model_file << std::endl;
+    net_ = torch::jit::load(model_file);
     net_.to(torch::kCUDA);
     std::cerr << "> Load model done." << std::endl;
   }
@@ -193,7 +200,7 @@ public:
         node = node->get_parent();
         z = -z;
       }
-    } while (++total_counts < 400);
+    } while (++total_counts < 87);
     // (hclock::now() - start_time) < threshold_time);
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                               hclock::now() - start_time)

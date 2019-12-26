@@ -72,9 +72,9 @@ public:
     return true;
   }
 
-  void registerAgent(std::unique_ptr<MCTSAgent> agent) {
-    agent_ = std::move(agent);
-    agent_->load_model();
+  void registerAgent(const std::string &model_file) {
+    agent_ = std::make_unique<MCTSAgent>();
+    agent_->load_model(model_file);
   }
 
 private:

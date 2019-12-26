@@ -17,10 +17,8 @@ def main(args):
                                 weight_decay=.0001)
     # dataset
     batch_size = args.batch_size
-    print('> Train dataset load from', args.train_dataset)
-    train_loader = SelfPlayLoader(args.train_dataset, args.device)
-    print('> Test dataset load from', args.test_dataset)
-    test_loader = SelfPlayLoader(args.test_dataset, args.device)
+    print('> Dataset load from', args.dataset)
+    train_loader = SelfPlayLoader(args.dataset, args.device)
 
     # restore model
     epoch_start = 1
@@ -62,19 +60,6 @@ def main(args):
                     'optimizer': optimizer.state_dict(),
                 }, f'{args.path}-{epoch}.ckpt')
 
-            # test accuracy
-            correct, total = 0, 0
-            for features in test_loader:
-                inputs, p_labels, _ = zip(*features)
-                input_batch = torch.stack(inputs)
-                p_batch = torch.stack(p_labels)
-                p_logits, _ = net(input_batch)
-                predicted = torch.argmax(p_logits, dim=1)
-                correct += (predicted == p_batch.squeeze()).sum().item()
-                total += len(input_batch)
-            print('[{:5d}] Test Accuracy: {:.2%}'.format(
-                epoch, correct / total))
-
     # freeze model
     inputs = torch.rand(1, 4, 9, 9).to(args.device)
     frozen_net = torch.jit.trace(net, inputs)
@@ -84,8 +69,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # dataset
-    parser.add_argument('--train-dataset', default='../../self-play')
-    parser.add_argument('--test-dataset', default='../../self-play-test')
+    parser.add_argument('--dataset', default='../../self-play')
     # model
     parser.add_argument('-p', '--path', default='model/model')
     parser.add_argument('-r', '--restore', action='store_true')
