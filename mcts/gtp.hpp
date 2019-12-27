@@ -29,8 +29,8 @@ struct Position {
     return in;
   }
   friend std::ostream &operator<<(std::ostream &out, const Position &p) {
-    out << char(static_cast<size_t>(p.p0 >= 8) + p.p0 + 'A')
-        << char((8 - p.p1) + '1');
+    out << static_cast<char>((p.p0 >= 8 ? 1 : 0) + p.p0 + 'A')
+        << static_cast<char>((8 - p.p1) + '1');
     return out;
   }
 

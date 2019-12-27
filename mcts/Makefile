@@ -14,6 +14,8 @@ all: mcts
 
 mcts: SRC = nogo.cpp
 mcts: CPPFLAGS += -D_GLIBCXX_USE_CXX11_ABI=1
+#mcts: CPPFLAGS += -DSHOW_INFO
+#mcts: CPPFLAGS += -DSELF_PLAY
 mcts: CPPFLAGS += -isystem $(LIBTORCH)/include
 mcts: CPPFLAGS += -isystem $(LIBTORCH)/include/csrc/api/include
 mcts: LDFLAGS += -L$(LIBTORCH)/lib

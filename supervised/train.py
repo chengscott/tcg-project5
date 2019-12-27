@@ -40,7 +40,7 @@ def main(args):
         p_logits, v_logits = net(inputs)
         v_loss = v_criterion(v_logits, v_labels)
         p_loss = p_criterion(p_logits, p_labels.squeeze())
-        loss = v_loss * .01 + p_loss
+        loss = v_loss * .1 + p_loss
         loss.backward()
         optimizer.step()
 

@@ -8,6 +8,20 @@
 #include <torch/script.h>
 #include <unordered_map>
 
+#ifdef SELF_PLAY
+constexpr const bool g_SELF_PLAY = true;
+constexpr const size_t g_TOTAL_COUNTS = 400;
+#else
+constexpr const bool g_SELF_PLAY = false;
+constexpr const size_t g_TOTAL_COUNTS = 87;
+#endif
+
+#ifdef SHOW_INFO
+constexpr const bool g_SHOW_INFO = true;
+#else
+constexpr const bool g_SHOW_INFO = false;
+#endif
+
 class MCTSAgent {
 private:
   class Node {
@@ -21,9 +35,9 @@ private:
       float max_score = -1;
       for (size_t i = 0; i < children_size_; ++i) {
         auto &child = children_[i];
-        const float score =
-            child.q_value_ +
-            1.5f * prob_[child.pos_] * sqrt_visits_ / (1 + child.visits_);
+        const float score = child.q_value_ + 1.5f * prob_[child.pos_] *
+                                                 sqrt_visits_ /
+                                                 (1 + child.visits_);
         child.uct_score_ = score;
         max_score = std::max(score, max_score);
       }
@@ -99,8 +113,10 @@ private:
       z_value_ = v_view[0][0];
       // expand child
       expand(b, net);
-      // root add dirichlet
-      // add_dirichlet(children_size_, rng);
+      if constexpr (g_SELF_PLAY) {
+        // root add dirichlet
+        add_dirichlet(children_size_, rng);
+      }
       return true;
     }
     void update(float z) noexcept {
@@ -110,19 +126,38 @@ private:
     }
     void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
         noexcept {
+      if constexpr (g_SELF_PLAY) {
+        std::cerr << "==========DIST=BEGIN==========" << std::endl;
+      }
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
         if (child.visits_ > 0) {
           visits.emplace(child.pos_, child.visits_);
-          // std::cerr << child.pos_ << ' ' << child.visits_ << std::endl;
-          size_t p0 = child.pos_ % 9, p1 = child.pos_ / 9;
-          std::cerr << char(static_cast<size_t>(p0 >= 8) + p0 + 'A')
-                    << char((8 - p1) + '1') << ' ' << child.visits_ << ' '
-                    << child.z_value_ << ' ' << child.q_value_ << std::endl;
+          // show self-play info
+          if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
+            size_t p0 = child.pos_ % 9, p1 = child.pos_ / 9;
+            auto cp0 = static_cast<char>((p0 >= 8 ? 1 : 0) + p0 + 'A'),
+                 cp1 = static_cast<char>((8 - p1) + '1');
+            std::cerr << cp0 << cp1;
+          }
+          if constexpr (g_SELF_PLAY) {
+            std::cerr << ' ' << child.pos_ << ' ' << child.visits_;
+          }
+          if constexpr (g_SHOW_INFO) {
+            std::cerr << ' ' << child.z_value_ << ' ' << child.q_value_;
+          }
+          if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
+            std::cerr << std::endl;
+          }
         }
       }
-      std::cerr << "before: " << z_value_ << std::endl;
-      std::cerr << "after:  " << q_value_ << std::endl;
+      if constexpr (g_SELF_PLAY) {
+        std::cerr << "==========DIST=END==========" << std::endl << std::endl;
+      }
+      if constexpr (g_SHOW_INFO) {
+        std::cerr << "before: " << z_value_ << std::endl
+                  << "after:  " << q_value_ << std::endl;
+      }
     }
 
   private:
@@ -200,13 +235,16 @@ public:
         node = node->get_parent();
         z = -z;
       }
-    } while (++total_counts < 87);
+    } while (++total_counts < g_TOTAL_COUNTS);
     // (hclock::now() - start_time) < threshold_time);
-    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              hclock::now() - start_time)
-                              .count();
-    std::cerr << duration << " ms" << std::endl
-              << total_counts << " simulations" << std::endl;
+    if constexpr (g_SHOW_INFO) {
+      const auto duration =
+          std::chrono::duration_cast<std::chrono::milliseconds>(hclock::now() -
+                                                                start_time)
+              .count();
+      std::cerr << duration << " ms" << std::endl
+                << total_counts << " simulations" << std::endl;
+    }
 
     std::unordered_map<size_t, size_t> visits;
     root.get_children_visits(visits);
