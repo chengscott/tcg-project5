@@ -8,8 +8,10 @@ from torch import nn
 
 def main(args):
     net = AlphaZero(in_channels=4, layers=args.layers).to(args.device)
-    p_criterion = nn.CrossEntropyLoss()
+    p_criterion = lambda p_logits, p_labels: (
+        (-p_labels * torch.log_softmax(p_logits, dim=1)).sum(dim=1).mean())
     v_criterion = nn.MSELoss()
+    v_weight = .1 if args.supervised else 1.
     # TODO: decrease learning rate
     optimizer = torch.optim.SGD(net.parameters(),
                                 lr=args.lr,
@@ -18,13 +20,15 @@ def main(args):
     # dataset
     batch_size = args.batch_size
     print('> Dataset load from', args.dataset)
-    train_loader = SelfPlayLoader(args.dataset, args.device)
+    train_loader = SelfPlayLoader(args.dataset,
+                                  args.device,
+                                  load_policy=not args.supervised)
 
     # restore model
     epoch_start = 1
     if args.restore:
-        print('> Restore from', args.path)
-        checkpoint = torch.load(args.path)
+        print('> Restore from', args.load)
+        checkpoint = torch.load(args.load)
         net.load_state_dict(checkpoint['net'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         epoch_start = checkpoint['epoch']
@@ -39,19 +43,17 @@ def main(args):
         # forward + backward + optimize
         p_logits, v_logits = net(inputs)
         v_loss = v_criterion(v_logits, v_labels)
-        p_loss = p_criterion(p_logits, p_labels.squeeze())
-        loss = v_loss * .1 + p_loss
+        p_loss = p_criterion(p_logits, p_labels)
+        loss = v_loss * v_weight + p_loss
         loss.backward()
         optimizer.step()
 
-        # train accuracy
+        # train loss
         with torch.no_grad():
-            predicted = torch.argmax(p_logits, dim=1)
-            correct = (predicted == p_labels.squeeze()).sum().item()
-            print('[{:5d}] Accuracy: {:.2%} Loss: {:.5f}'.format(
-                epoch, correct / batch_size, loss.item()))
+            print('[{:5d}] PN_Loss: {:.5f} VN_Loss: {:.5f}'.format(
+                epoch, p_loss.item(), v_loss.item()))
 
-        if epoch % 1000 == 0:
+        if epoch % 10000 == 0:
             # model checkpoint
             torch.save(
                 {
@@ -68,12 +70,14 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # dataset
-    parser.add_argument('--dataset', default='../../self-play')
     # model
     parser.add_argument('-p', '--path', default='model/model')
+    parser.add_argument('-l', '--load', default='model/model.ckpt')
     parser.add_argument('-r', '--restore', action='store_true')
     # training
+    parser.add_argument('--dataset', default='../../self-play')
+    parser.add_argument('--supervised', action='store_true')
+    # network
     parser.add_argument('-d', '--device', default='cuda')
     parser.add_argument('--layers', default=5, type=int)
     parser.add_argument('-bs', '--batch_size', default=64, type=int)

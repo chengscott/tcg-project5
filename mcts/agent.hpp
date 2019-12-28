@@ -124,16 +124,13 @@ private:
       sqrt_visits_ = std::sqrt(visits_);
       q_value_ += (z - q_value_) / visits_;
     }
-    void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
-        noexcept {
+    void show_dist_info() const noexcept {
       if constexpr (g_SELF_PLAY) {
         std::cerr << "==========DIST=BEGIN==========" << std::endl;
       }
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
         if (child.visits_ > 0) {
-          visits.emplace(child.pos_, child.visits_);
-          // show self-play info
           if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
             size_t p0 = child.pos_ % 9, p1 = child.pos_ / 9;
             auto cp0 = static_cast<char>((p0 >= 8 ? 1 : 0) + p0 + 'A'),
@@ -158,6 +155,28 @@ private:
         std::cerr << "before: " << z_value_ << std::endl
                   << "after:  " << q_value_ << std::endl;
       }
+    }
+    void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
+        noexcept {
+      for (size_t i = 0; i < children_size_; ++i) {
+        const auto &child = children_[i];
+        if (child.visits_ > 0) {
+          visits.emplace(child.pos_, child.visits_);
+        }
+      }
+    }
+    template <class PRNG> size_t get_policy_move(PRNG &rng) const {
+      float moves[81] = {}, sum = 0.f;
+      for (size_t i = 0; i < children_size_; ++i) {
+        const auto &child = children_[i];
+        moves[child.pos_] = child.visits_;
+        sum += child.visits_;
+      }
+      for (auto &move : moves) {
+        move /= sum;
+      }
+      std::discrete_distribution<size_t> policy(moves, moves + 81);
+      return policy(rng);
     }
 
   private:
@@ -246,6 +265,14 @@ public:
                 << total_counts << " simulations" << std::endl;
     }
 
+    if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
+      root.show_dist_info();
+    }
+    if constexpr (g_SELF_PLAY) {
+      if (b.get_move_count() < 30) {
+        return root.get_policy_move(engine_);
+      }
+    }
     std::unordered_map<size_t, size_t> visits;
     root.get_children_visits(visits);
     size_t best_move = std::max_element(std::begin(visits), std::end(visits),

@@ -2,22 +2,25 @@ CXX := g++
 CXXFLAGS := -std=c++17
 CXXFLAGS += -O3 -march=native #-flto
 #CXXFLAGS += -O0 -g #-pg
-CXXFLAGS += -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wpedantic
-CXXFLAGS += -Wunused -Wsign-conversion -Wdouble-promotion
 
 LIBTORCH := /home/cgilab/GO/adam/Downloads/libtorch
+#LIBTORCH := /opt/conda/lib/python3.6/site-packages/torch
 MCTS_TARGET := nogo
 BOARD_TARGET := _board.cpython-37m-x86_64-linux-gnu.so
 
-.PHONY: all mcts board format check clean
+.PHONY: all mcts-sp mcts board format check clean
 all: mcts
+
+mcts-sp: CPPFLAGS += -DSELF_PLAY
+mcts-sp: mcts
 
 mcts: SRC = nogo.cpp
 mcts: CPPFLAGS += -D_GLIBCXX_USE_CXX11_ABI=1
 #mcts: CPPFLAGS += -DSHOW_INFO
-#mcts: CPPFLAGS += -DSELF_PLAY
 mcts: CPPFLAGS += -isystem $(LIBTORCH)/include
 mcts: CPPFLAGS += -isystem $(LIBTORCH)/include/csrc/api/include
+mcts: CXXFLAGS += -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wpedantic
+mcts: CXXFLAGS += -Wunused -Wsign-conversion -Wdouble-promotion
 mcts: LDFLAGS += -L$(LIBTORCH)/lib
 mcts: LDFLAGS += -ltorch -lc10 -fopenmp -Wl,-rpath=$(LIBTORCH)/lib
 mcts: LDFLAGS += -lcuda

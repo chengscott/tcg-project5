@@ -60,6 +60,10 @@ public:
     return true;
   }
 
+  size_t get_move_count() const noexcept {
+    return (board_[0] | board_[1]).count();
+  }
+
   bool has_legal_move(size_t bw) const noexcept { return !forbid_[bw].all(); }
 
   board_t get_legal_moves(size_t bw) const noexcept { return ~forbid_[bw]; }
