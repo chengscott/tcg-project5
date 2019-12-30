@@ -4,3 +4,4 @@ model/
 *.so
 *.pt
 nogo
+evaluator

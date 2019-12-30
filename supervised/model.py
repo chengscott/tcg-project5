@@ -28,20 +28,20 @@ class BasicBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, in_channels, layers):
+    def __init__(self, in_channels, layers, channels):
         super().__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels,
-                      256,
+                      channels,
                       kernel_size=3,
                       stride=1,
                       padding=1,
                       bias=False),
-            nn.BatchNorm2d(256),
+            nn.BatchNorm2d(channels),
             nn.ReLU(),
         )
         self.convs = nn.ModuleList(
-            [BasicBlock(256, 256) for _ in range(layers)])
+            [BasicBlock(channels, channels) for _ in range(layers)])
 
     def forward(self, x):
         x = self.conv1(x)
@@ -51,26 +51,26 @@ class ResNet(nn.Module):
 
 
 class AlphaZero(nn.Module):
-    def __init__(self, in_channels, layers):
+    def __init__(self, in_channels, layers, channels=256):
         super().__init__()
-        self.resnet = ResNet(in_channels, layers)
+        self.resnet = ResNet(in_channels, layers, channels)
         # policy head
         self.policy_head_front = nn.Sequential(
-            nn.Conv2d(256, 2, 1, bias=False),
+            nn.Conv2d(channels, 2, 1, bias=False),
             nn.BatchNorm2d(2),
             nn.ReLU(),
         )
         self.policy_head_end = nn.Linear(2 * 81, 81)
         # value head
         self.value_head_front = nn.Sequential(
-            nn.Conv2d(256, 1, 1, bias=False),
+            nn.Conv2d(channels, 1, 1, bias=False),
             nn.BatchNorm2d(1),
             nn.ReLU(),
         )
         self.value_head_end = nn.Sequential(
-            nn.Linear(81, 256),
+            nn.Linear(81, channels),
             nn.ReLU(),
-            nn.Linear(256, 1),
+            nn.Linear(channels, 1),
             nn.Tanh(),
         )
 

@@ -6,6 +6,7 @@ CXXFLAGS += -O3 -march=native #-flto
 LIBTORCH := /home/cgilab/GO/adam/Downloads/libtorch
 #LIBTORCH := /opt/conda/lib/python3.6/site-packages/torch
 MCTS_TARGET := nogo
+EVALUATOR_TARGET := evaluator
 BOARD_TARGET := _board.cpython-37m-x86_64-linux-gnu.so
 
 .PHONY: all mcts-sp mcts board format check clean
@@ -16,7 +17,7 @@ mcts-sp: mcts
 
 mcts: SRC = nogo.cpp
 mcts: CPPFLAGS += -D_GLIBCXX_USE_CXX11_ABI=1
-#mcts: CPPFLAGS += -DSHOW_INFO
+mcts: CPPFLAGS += -DSHOW_INFO
 mcts: CPPFLAGS += -isystem $(LIBTORCH)/include
 mcts: CPPFLAGS += -isystem $(LIBTORCH)/include/csrc/api/include
 mcts: CXXFLAGS += -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wpedantic
@@ -26,6 +27,19 @@ mcts: LDFLAGS += -ltorch -lc10 -fopenmp -Wl,-rpath=$(LIBTORCH)/lib
 mcts: LDFLAGS += -lcuda
 mcts:
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SRC) -o $(MCTS_TARGET) $(LDFLAGS)
+
+evaluator: SRC = evaluator.cpp
+evaluator: CPPFLAGS += -DSELF_PLAY
+evaluator: CPPFLAGS += -D_GLIBCXX_USE_CXX11_ABI=1
+evaluator: CPPFLAGS += -isystem $(LIBTORCH)/include
+evaluator: CPPFLAGS += -isystem $(LIBTORCH)/include/csrc/api/include
+evaluator: CXXFLAGS += -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wpedantic
+evaluator: CXXFLAGS += -Wunused -Wsign-conversion -Wdouble-promotion
+evaluator: LDFLAGS += -L$(LIBTORCH)/lib
+evaluator: LDFLAGS += -ltorch -lc10 -fopenmp -Wl,-rpath=$(LIBTORCH)/lib
+evaluator: LDFLAGS += -lcuda
+evaluator:
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SRC) -o $(EVALUATOR_TARGET) $(LDFLAGS)
 
 board: SRC = module.cpp
 # pybind11
@@ -50,4 +64,4 @@ run: $(MCTS_TARGET)
 	gogui-server -port 5566 "./$(MCTS_TARGET) ../supervised/model/model.pt"
 
 clean:
-	rm -rf $(MCTS_TARGET) $(BOARD_TARGET)
+	rm -rf $(MCTS_TARGET) $(EVALUATOR_TARGET) $(BOARD_TARGET)

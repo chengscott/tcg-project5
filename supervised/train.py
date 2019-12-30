@@ -7,7 +7,8 @@ from torch import nn
 
 
 def main(args):
-    net = AlphaZero(in_channels=4, layers=args.layers).to(args.device)
+    net = AlphaZero(in_channels=4, layers=args.layers,
+                    channels=args.channels).to(args.device)
     p_criterion = lambda p_logits, p_labels: (
         (-p_labels * torch.log_softmax(p_logits, dim=1)).sum(dim=1).mean())
     v_criterion = nn.MSELoss()
@@ -20,9 +21,7 @@ def main(args):
     # dataset
     batch_size = args.batch_size
     print('> Dataset load from', args.dataset)
-    train_loader = SelfPlayLoader(args.dataset,
-                                  args.device,
-                                  load_policy=not args.supervised)
+    train_loader = SelfPlayLoader(args.dataset, args.device)
 
     # restore model
     epoch_start = 1
@@ -79,7 +78,8 @@ if __name__ == '__main__':
     parser.add_argument('--supervised', action='store_true')
     # network
     parser.add_argument('-d', '--device', default='cuda')
-    parser.add_argument('--layers', default=5, type=int)
+    parser.add_argument('--layers', default=10, type=int)
+    parser.add_argument('--channels', default=128, type=int)
     parser.add_argument('-bs', '--batch_size', default=64, type=int)
     parser.add_argument('-e', '--epochs', default=100000, type=int)
     parser.add_argument('-lr', '--lr', default=.01, type=float)

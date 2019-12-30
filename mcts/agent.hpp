@@ -220,6 +220,10 @@ public:
     std::cerr << "> Load model done." << std::endl;
   }
 
+  std::unordered_map<size_t, size_t> get_policy() const noexcept {
+    return visits_;
+  }
+
 public:
   using hclock = std::chrono::high_resolution_clock;
   const static constexpr auto threshold_time = std::chrono::seconds(1);
@@ -265,17 +269,20 @@ public:
                 << total_counts << " simulations" << std::endl;
     }
 
-    if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
+    // obtain root policy
+    visits_.clear();
+    root.get_children_visits(visits_);
+    if constexpr (g_SHOW_INFO) {
       root.show_dist_info();
     }
+    // move by policy
     if constexpr (g_SELF_PLAY) {
       if (b.get_move_count() < 30) {
         return root.get_policy_move(engine_);
       }
     }
-    std::unordered_map<size_t, size_t> visits;
-    root.get_children_visits(visits);
-    size_t best_move = std::max_element(std::begin(visits), std::end(visits),
+    // move by largest count
+    size_t best_move = std::max_element(std::begin(visits_), std::end(visits_),
                                         [](const auto &p1, const auto &p2) {
                                           return p1.second < p2.second;
                                         })
@@ -285,6 +292,7 @@ public:
   }
 
 private:
+  std::unordered_map<size_t, size_t> visits_;
   torch::jit::script::Module net_;
   std::random_device seed_{};
   std::default_random_engine engine_{seed_()};
