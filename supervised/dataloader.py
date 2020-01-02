@@ -1,21 +1,20 @@
-import torch
-import numpy as np
+from _board import Board
+import os
+import pathlib
 import random
+import numpy as np
+import sgf
+import torch
 
 
 class SelfPlayLoader(torch.utils.data.Dataset):
-    def __init__(self, root, device='cpu'):
-        from _board import Board
-        import sgf
-        import pathlib
-
+    def load(self, names, device='cpu'):
         def move_to_index(move):
             (p0, p1), = move
             MOVE = 'abcdefghi'
             return MOVE.find(p0) + MOVE.find(p1) * 9
 
         self._features = []
-        names = pathlib.Path(root).rglob('*.sgf')
         for name in names:
             f = open(name)
             collection = sgf.parse(f.read())
@@ -54,12 +53,22 @@ class SelfPlayLoader(torch.utils.data.Dataset):
                         # print(k, move, bw, index)
                     elif 'RE' in prop:
                         winner = 0 if 'B+' in prop['RE'][0] else 1
-                self._features.append(features)
+                self._features.extend(features)
         self._len = len(self._features)
+
+    @staticmethod
+    def _isomorphism(f, i):
+        return torch.rot90(f, i, (1, 2)) if i < 4 else torch.rot90(
+            f.transpose(1, 2), i, (1, 2))
 
     def sample(self, batch_size=64):
         index = np.random.randint(0, self._len, batch_size)
-        batch = [random.choice(self._features[idx]) for idx in index]
+        batch = [self._features[idx] for idx in index]
+
+        isom = SelfPlayLoader._isomorphism
+        isom_index = map(int, np.random.randint(0, 8, batch_size))
+        batch = [(isom(f, i), isom(p.reshape(1, 9, 9), i).reshape(81), v)
+                 for i, (f, p, v) in zip(isom_index, batch)]
         return tuple(torch.stack(b) for b in zip(*batch))
 
     def __len__(self):
