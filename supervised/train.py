@@ -9,8 +9,10 @@ import glob
 
 
 def main(args):
-    net = AlphaZero(in_channels=4, layers=args.layers,
-                    channels=args.channels).to(args.device)
+    net = AlphaZero(in_channels=4,
+                    layers=args.layers,
+                    channels=args.channels,
+                    bias=True).to(args.device)
     p_criterion = lambda p_logits, p_labels: (
         (-p_labels * torch.log_softmax(p_logits, dim=1)).sum(dim=1).mean())
     v_criterion = nn.MSELoss()
@@ -19,7 +21,8 @@ def main(args):
     optimizer = torch.optim.SGD(net.parameters(),
                                 lr=args.lr,
                                 momentum=0.9,
-                                weight_decay=.0001)
+                                weight_decay=.0001,
+                                nesterov=True)
     # dataset
     batch_size = args.batch_size
     dataloader = SelfPlayLoader()

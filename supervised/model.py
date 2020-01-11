@@ -2,17 +2,17 @@ from torch import nn
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, in_channels, channels, stride=1):
+    def __init__(self, in_channels, channels, bias=False):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels,
                                channels,
                                3,
-                               stride,
+                               stride=1,
                                padding=1,
-                               bias=False)
+                               bias=bias)
         self.bn1 = nn.BatchNorm2d(channels)
         self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv2d(channels, channels, 3, 1, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(channels, channels, 3, 1, padding=1, bias=bias)
         self.bn2 = nn.BatchNorm2d(channels)
         self.relu2 = nn.ReLU()
 
@@ -28,7 +28,7 @@ class BasicBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, in_channels, layers, channels):
+    def __init__(self, in_channels, layers, channels, bias=False):
         super().__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels,
@@ -36,12 +36,12 @@ class ResNet(nn.Module):
                       kernel_size=3,
                       stride=1,
                       padding=1,
-                      bias=False),
+                      bias=bias),
             nn.BatchNorm2d(channels),
             nn.ReLU(),
         )
         self.convs = nn.ModuleList(
-            [BasicBlock(channels, channels) for _ in range(layers)])
+            [BasicBlock(channels, channels, bias) for _ in range(layers)])
 
     def forward(self, x):
         x = self.conv1(x)
@@ -51,19 +51,19 @@ class ResNet(nn.Module):
 
 
 class AlphaZero(nn.Module):
-    def __init__(self, in_channels, layers, channels=256):
+    def __init__(self, in_channels, layers=10, channels=128, bias=False):
         super().__init__()
-        self.resnet = ResNet(in_channels, layers, channels)
+        self.resnet = ResNet(in_channels, layers, channels, bias)
         # policy head
         self.policy_head_front = nn.Sequential(
-            nn.Conv2d(channels, 2, 1, bias=False),
+            nn.Conv2d(channels, 2, 1),
             nn.BatchNorm2d(2),
             nn.ReLU(),
         )
         self.policy_head_end = nn.Linear(2 * 81, 81)
         # value head
         self.value_head_front = nn.Sequential(
-            nn.Conv2d(channels, 1, 1, bias=False),
+            nn.Conv2d(channels, 1, 1),
             nn.BatchNorm2d(1),
             nn.ReLU(),
         )
