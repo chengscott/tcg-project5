@@ -32,18 +32,18 @@ private:
     constexpr bool has_children() const noexcept { return children_size_ > 0; }
     template <class PRNG>
     Node *select_child(PRNG &rng, size_t &bw, size_t &pos) {
-      float max_score = -1;
+      float max_score = -1.f;
       for (size_t i = 0; i < children_size_; ++i) {
         auto &child = children_[i];
         const float score = child.q_value_ + 1.5f * prob_[child.pos_] *
                                                  sqrt_visits_ /
                                                  (1 + child.visits_);
         child.uct_score_ = score;
-        max_score = std::max(score, max_score);
+        max_score = (score - max_score > 0.0001f) ? score : max_score;
       }
       Board::board_t max_children{};
       for (size_t i = 0; i < children_size_; ++i) {
-        if (std::abs(children_[i].uct_score_ - max_score) < .0001f) {
+        if ((children_[i].uct_score_ - max_score) > -0.0001f) {
           max_children.set(i);
         }
       }
@@ -54,6 +54,9 @@ private:
       return &child;
     }
     bool expand(const Board &b, torch::jit::script::Module &net) noexcept {
+      if (visits_ == 0) {
+        return false;
+      }
       auto moves(b.get_legal_moves(1 - bw_));
       const size_t size = moves.count();
       if (size == 0) {
@@ -89,7 +92,7 @@ private:
         for (long j = 0; j < 81; ++j) {
           child.prob_[j] = p_view[i][j];
         }
-        child.z_value_ = v_view[i][0];
+        child.z_value_ = -v_view[i][0];
       }
       return true;
     }
@@ -124,37 +127,24 @@ private:
       sqrt_visits_ = std::sqrt(visits_);
       q_value_ += (z - q_value_) / visits_;
     }
-    void show_dist_info() const noexcept {
-      if constexpr (g_SELF_PLAY) {
-        std::cerr << "==========DIST=BEGIN==========" << std::endl;
-      }
+    void show_info() const noexcept {
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
         if (child.visits_ > 0) {
-          if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
-            size_t p0 = child.pos_ % 9, p1 = child.pos_ / 9;
-            auto cp0 = static_cast<char>((p0 >= 8 ? 1 : 0) + p0 + 'A'),
-                 cp1 = static_cast<char>((8 - p1) + '1');
-            std::cerr << cp0 << cp1;
-          }
-          if constexpr (g_SELF_PLAY) {
-            std::cerr << ' ' << child.pos_ << ' ' << child.visits_;
-          }
-          if constexpr (g_SHOW_INFO) {
-            std::cerr << ' ' << child.z_value_ << ' ' << child.q_value_;
-          }
-          if constexpr (g_SELF_PLAY || g_SHOW_INFO) {
-            std::cerr << std::endl;
-          }
+          size_t p0 = child.pos_ % 9, p1 = child.pos_ / 9;
+          auto cp0 = static_cast<char>((p0 >= 8 ? 1 : 0) + p0 + 'A'),
+               cp1 = static_cast<char>((8 - p1) + '1');
+          std::cerr << cp0 << cp1 << ' ' << std::setw(3) << child.visits_ << ' '
+                    << child.z_value_ << ' ' << child.q_value_ << std::endl;
         }
       }
-      if constexpr (g_SELF_PLAY) {
-        std::cerr << "==========DIST=END==========" << std::endl << std::endl;
+      float z_sum = 0.f;
+      for (size_t i = 0; i < children_size_; ++i) {
+        const auto &child = children_[i];
+        z_sum += child.visits_ * child.q_value_;
       }
-      if constexpr (g_SHOW_INFO) {
-        std::cerr << "before: " << z_value_ << std::endl
-                  << "after:  " << q_value_ << std::endl;
-      }
+      std::cerr << "before: " << z_value_ << std::endl
+                << "after:  " << z_sum / g_TOTAL_COUNTS << std::endl;
     }
     void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
         noexcept {
@@ -273,11 +263,11 @@ public:
     visits_.clear();
     root.get_children_visits(visits_);
     if constexpr (g_SHOW_INFO) {
-      root.show_dist_info();
+      root.show_info();
     }
     // move by policy
     if constexpr (g_SELF_PLAY) {
-      if (b.get_move_count() < 30) {
+      if (b.get_move_count() < 10) {
         return root.get_policy_move(engine_);
       }
     }
