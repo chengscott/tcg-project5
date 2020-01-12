@@ -1,10 +1,10 @@
 #pragma once
 #include "board.hpp"
+#include "random.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
-#include <random>
 #include <torch/script.h>
 #include <unordered_map>
 
@@ -284,6 +284,6 @@ public:
 private:
   std::unordered_map<size_t, size_t> visits_;
   torch::jit::script::Module net_;
-  std::random_device seed_{};
-  std::default_random_engine engine_{seed_()};
+  splitmix seed_{};
+  xorshift engine_{seed_()};
 };

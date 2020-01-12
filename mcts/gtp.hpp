@@ -2,10 +2,9 @@
 #include "agent.hpp"
 #include "board.hpp"
 #include <algorithm>
-#include <functional>
+#include <array>
 #include <iostream>
 #include <iterator>
-#include <map>
 #include <memory>
 #include <vector>
 
@@ -37,6 +36,19 @@ struct Position {
   size_t p0, p1;
 };
 
+namespace detail {
+constexpr uint32_t fnv1a_32(const char *s, size_t count) {
+  // FNV-1a 32bit hashing algorithm.
+  return ((count > 0u ? fnv1a_32(s, count - 1) : 2166136261u) ^
+          static_cast<uint32_t>(s[count])) *
+         16777619u;
+}
+} // namespace detail
+
+constexpr uint32_t operator"" _hash(const char *s, size_t count) {
+  return detail::fnv1a_32(s, count);
+}
+
 class GTPHelper {
 public:
   static GTPHelper &getInstance() {
@@ -46,7 +58,6 @@ public:
   GTPHelper() {
     std::ios::sync_with_stdio(false);
     history_.reserve(81);
-    register_commands();
   }
   ~GTPHelper() = default;
   GTPHelper(GTPHelper const &) = delete;
@@ -57,17 +68,77 @@ public:
 public:
   bool execute() {
     std::string cmd;
-    fin_ >> cmd;
-    if (cmd == "quit") {
-      fout_ << "=\n\n";
+    std::cin >> cmd;
+    const auto cmd_hash = detail::fnv1a_32(cmd.c_str(), cmd.size());
+    switch (cmd_hash) {
+    // Adminstrative Commands
+    case "quit"_hash:
+      std::cout << "=\n\n";
       return false;
-    }
-    const auto &dispatch = dispatcher_.find(cmd);
-    if (dispatch != std::end(dispatcher_)) {
-      dispatch->second();
-    } else {
-      std::getline(fin_, cmd);
-      fout_ << "? unknown command\n\n";
+    case "protocol_version"_hash:
+      protocol_version();
+      break;
+    case "name"_hash:
+      name();
+      break;
+    case "version"_hash:
+      version();
+      break;
+    case "known_command"_hash:
+      known_command();
+      break;
+    case "list_commands"_hash:
+      list_commands();
+      break;
+    // Setup Commands
+    case "boardsize"_hash:
+      boardsize();
+      break;
+    case "clear_board"_hash:
+      clear_board();
+      break;
+    case "komi"_hash:
+      komi();
+      break;
+    case "play"_hash:
+      play();
+      break;
+    case "genmove"_hash:
+      genmove();
+      break;
+    case "undo"_hash:
+      undo();
+      break;
+    // Tournament Commands
+    case "final_score"_hash:
+      final_score();
+      break;
+    // Debug Commands
+    case "showboard"_hash:
+      showboard();
+      break;
+    // GoGui Commands
+    /*case "gogui-rules_game_id"_hash:
+      gogui_rules_game_id();
+      break;
+    case "gogui-rules_board"_hash:
+      gogui_rules_board();
+      break;
+    case "gogui-rules_board_size"_hash:
+      gogui_rules_board_size();
+      break;
+    case "gogui-rules_legal_moves"_hash:
+      gogui_rules_legal_moves();
+      break;
+    case "gogui-rules_side_to_move"_hash:
+      gogui_rules_side_to_move();
+      break;
+    case "gogui-rules_final_result"_hash:
+      gogui_rules_final_result();
+      break;*/
+    default:
+      std::getline(std::cin, cmd);
+      std::cout << "? unknown command\n\n";
     }
     return true;
   }
@@ -79,35 +150,35 @@ public:
 
 private:
   /* Adminstrative Commands */
-  void protocol_version() const { fout_ << "= 2\n\n"; }
-  void name() const { fout_ << "= GuaGua\n\n"; }
-  void version() const { fout_ << "= 1.0\n\n"; }
+  void protocol_version() const { std::cout << "= 2\n\n"; }
+  void name() const { std::cout << "= GuaGua\n\n"; }
+  void version() const { std::cout << "= 1.0\n\n"; }
   void known_command() const {
     std::string cmd;
-    fin_ >> cmd;
-    if (dispatcher_.find(cmd) != std::end(dispatcher_)) {
-      fout_ << "= true\n\n";
+    std::cin >> cmd;
+    if (std::find(std::begin(all_commands_), std::end(all_commands_), cmd) !=
+        std::end(all_commands_)) {
+      std::cout << "= true\n\n";
     } else {
-      fout_ << "= false\n\n";
+      std::cout << "= false\n\n";
     }
   }
   void list_commands() const {
-    fout_ << "=\n";
-    std::transform(std::begin(dispatcher_), std::end(dispatcher_),
-                   std::ostream_iterator<std::string>(fout_, "\n"),
-                   [](const auto &p) { return p.first; });
-    fout_ << "\n";
+    std::cout << "=\n";
+    std::copy(std::begin(all_commands_), std::end(all_commands_),
+              std::ostream_iterator<std::string>(std::cout, "\n"));
+    std::cout << "\n";
   }
 
 private:
   /* Setup Commands */
   void boardsize() const {
     int size;
-    fin_ >> size;
+    std::cin >> size;
     if (size == 9) {
-      fout_ << "=\n\n";
+      std::cout << "=\n\n";
     } else {
-      fout_ << "? unacceptable size\n\n";
+      std::cout << "? unacceptable size\n\n";
     }
   }
   void clear_board() {
@@ -115,13 +186,13 @@ private:
     std::swap(board_, b);
     history_.clear();
     gogui_turns_ = true;
-    fout_ << "=\n\n";
+    std::cout << "=\n\n";
   }
   void komi() const {
     // not used
     float komi;
-    fin_ >> komi;
-    fout_ << "=\n\n";
+    std::cin >> komi;
+    std::cout << "=\n\n";
   }
 
 private:
@@ -129,44 +200,44 @@ private:
   void play() {
     std::string sbw;
     Position pos;
-    fin_ >> sbw >> pos;
+    std::cin >> sbw >> pos;
     auto bw = static_cast<size_t>(tolower(sbw[0]) == 'w');
     if (board_.place(bw, static_cast<size_t>(pos))) {
-      fout_ << "=\n\n";
+      std::cout << "=\n\n";
       history_.push_back(board_);
       gogui_turns_ = !gogui_turns_;
     } else {
-      fout_ << "? illegal move\n\n";
+      std::cout << "? illegal move\n\n";
     }
   }
   void genmove() {
     std::string sbw;
-    fin_ >> sbw;
+    std::cin >> sbw;
     auto bw = static_cast<size_t>(tolower(sbw[0]) == 'w');
     auto move = agent_->take_action(board_, bw);
     if (move < 81) {
-      fout_ << "= " << Position(move) << "\n\n";
-      history_.push_back(board_);
+      std::cout << "= " << Position(move) << "\n\n";
       board_.place(bw, move);
+      history_.push_back(board_);
     } else {
-      fout_ << "= resign\n\n";
+      std::cout << "= resign\n\n";
     }
   }
   void undo() {
     if (history_.empty()) {
-      fout_ << "? cannot undo\n\n";
+      std::cout << "? cannot undo\n\n";
       return;
     }
     board_ = history_.back();
     history_.pop_back();
-    fout_ << "=\n\n";
+    std::cout << "=\n\n";
   }
 
 private:
   /* Tournament Commands */
   // void time_settings() { ; }
   void final_score() const {
-    fout_ << "= " << (!gogui_turns_ ? "B" : "W") << "+1\n\n";
+    std::cout << "= " << (!gogui_turns_ ? "B" : "W") << "+1\n\n";
   }
 
 private:
@@ -176,76 +247,49 @@ private:
 
 private:
   /* Debug Commands */
-  void showboard() const { fout_ << "=\n" << board_; }
+  void showboard() const { std::cout << "=\n" << board_; }
 
 private:
   /* GoGui Rules */
   // void gogui_analyze_command() const { ; }
-  void gogui_rules_game_id() const { fout_ << "= Nogo\n\n"; }
-  void gogui_rules_board() const { fout_ << "=\n" << board_; }
-  void gogui_rules_board_size() const { fout_ << "= 9\n\n"; }
+  void gogui_rules_game_id() const { std::cout << "= Nogo\n\n"; }
+  void gogui_rules_board() const { std::cout << "=\n" << board_; }
+  void gogui_rules_board_size() const { std::cout << "= 9\n\n"; }
   void gogui_rules_legal_moves() const {
     size_t bw = gogui_turns_ ? 0 : 1;
-    fout_ << "=";
+    std::cout << "=";
     auto moves = board_.get_legal_moves(bw);
     for (size_t p = moves._Find_first(); p != 81; p = moves._Find_next(p)) {
-      fout_ << " " << Position(p);
+      std::cout << " " << Position(p);
     }
-    fout_ << "\n\n";
+    std::cout << "\n\n";
   }
   void gogui_rules_side_to_move() {
-    fout_ << "= " << (gogui_turns_ ? "black" : "white") << "\n\n";
+    std::cout << "= " << (gogui_turns_ ? "black" : "white") << "\n\n";
   }
   void gogui_rules_final_result() const {
-    fout_ << "= " << (!gogui_turns_ ? "Black" : "White") << " wins.\n\n";
+    std::cout << "= " << (!gogui_turns_ ? "Black" : "White") << " wins.\n\n";
   }
 
 private:
-  template <class F> constexpr void register_command(std::string &&cmd, F &&f) {
-    dispatcher_.emplace(cmd, std::bind(f, this));
-  }
-
-  void register_commands() {
-    // Adminstrative Commands
-    dispatcher_.emplace("quit", nullptr);
-    register_command("protocol_version", &GTPHelper::protocol_version);
-    register_command("name", &GTPHelper::name);
-    register_command("version", &GTPHelper::version);
-    register_command("known_command", &GTPHelper::known_command);
-    register_command("list_commands", &GTPHelper::list_commands);
-    // Setup Commands
-    register_command("boardsize", &GTPHelper::boardsize);
-    register_command("clear_board", &GTPHelper::clear_board);
-    register_command("komi", &GTPHelper::komi);
-    // Core Play Commands
-    register_command("play", &GTPHelper::play);
-    register_command("genmove", &GTPHelper::genmove);
-    register_command("undo", &GTPHelper::undo);
-    // Tournament Commands
-    register_command("final_score", &GTPHelper::final_score);
-    // Debug Commands
-    register_command("showboard", &GTPHelper::showboard);
-#ifdef ENABLE_RULES
-    // GoGui Commands
-    register_command("gogui-rules_game_id", &GTPHelper::gogui_rules_game_id);
-    register_command("gogui-rules_board", &GTPHelper::gogui_rules_board);
-    register_command("gogui-rules_board_size",
-                     &GTPHelper::gogui_rules_board_size);
-    register_command("gogui-rules_legal_moves",
-                     &GTPHelper::gogui_rules_legal_moves);
-    register_command("gogui-rules_side_to_move",
-                     &GTPHelper::gogui_rules_side_to_move);
-    register_command("gogui-rules_final_result",
-                     &GTPHelper::gogui_rules_final_result);
-#endif
-  }
-
-private:
-  constexpr static std::istream &fin_ = std::cin;
-  constexpr static std::ostream &fout_ = std::cout;
-  std::map<std::string, std::function<void()>> dispatcher_;
+  std::unique_ptr<MCTSAgent> agent_;
   Board board_;
   std::vector<Board> history_;
-  std::unique_ptr<MCTSAgent> agent_;
   bool gogui_turns_ = true;
+  static const constexpr std::array<const char *, 14> all_commands_ = {
+      // Adminstrative Commands
+      "quit", "protocol_version", "name", "version", "known_command",
+      "list_commands",
+      // Core Play Commands
+      "genmove", "play", "undo",
+      // Setup Commands
+      "boardsize", "clear_board", "komi",
+      // Tournament Commands
+      "final_score",
+      // Debug Commands
+      "showboard",
+      // GoGui Commands
+      /*"gogui-rules_game_id", "gogui-rules_board", "gogui-rules_board_size",
+      "gogui-rules_legal_moves", "gogui-rules_side_to_move",
+      "gogui-rules_final_result"*/};
 };
