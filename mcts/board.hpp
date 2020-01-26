@@ -69,12 +69,12 @@ public:
   board_t get_legal_moves(size_t bw) const noexcept { return ~forbid_[bw]; }
 
   float *get_features() noexcept {
-    const auto &bw = bw_;
+    const auto &bw = 1 - bw_;
     features_.resize(9 * 9 * 4);
     fill(board_[bw], 0);
-    fill(~forbid_[1 - bw], 1);
+    fill(board_[1 - bw], 1);
     fill(~forbid_[bw], 2);
-    fill(board_[1 - bw], 3);
+    fill(~forbid_[1 - bw], 3);
     return features_.data();
   }
 

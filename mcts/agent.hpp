@@ -127,7 +127,8 @@ private:
       sqrt_visits_ = std::sqrt(visits_);
       q_value_ += (z - q_value_) / visits_;
     }
-    void show_info() const noexcept {
+    void show_info(size_t best_move) const noexcept {
+      size_t best_i = -1;
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
         if (child.visits_ > 0) {
@@ -137,14 +138,20 @@ private:
           std::cerr << cp0 << cp1 << ' ' << std::setw(3) << child.visits_ << ' '
                     << child.z_value_ << ' ' << child.q_value_ << std::endl;
         }
+        if (child.pos_ == best_move) {
+          best_i = i;
+        }
       }
       float z_sum = 0.f;
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
         z_sum += child.visits_ * child.q_value_;
       }
-      std::cerr << "before: " << z_value_ << std::endl
-                << "after:  " << z_sum / g_TOTAL_COUNTS << std::endl;
+      const auto &best_child = children_[best_i];
+      std::cerr << "before:      " << z_value_ << std::endl
+                << "after:       " << z_sum / g_TOTAL_COUNTS << std::endl
+                << "best before: " << best_child.z_value_ << std::endl
+                << "best after:  " << best_child.q_value_ << std::endl;
     }
     void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
         noexcept {
@@ -262,9 +269,6 @@ public:
     // obtain root policy
     visits_.clear();
     root.get_children_visits(visits_);
-    if constexpr (g_SHOW_INFO) {
-      root.show_info();
-    }
     // move by policy
     if constexpr (g_SELF_PLAY) {
       if (b.get_move_count() < 10) {
@@ -277,6 +281,9 @@ public:
                                           return p1.second < p2.second;
                                         })
                            ->first;
+    if constexpr (g_SHOW_INFO) {
+      root.show_info(best_move);
+    }
 
     return best_move;
   }
